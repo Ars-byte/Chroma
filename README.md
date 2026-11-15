@@ -22,13 +22,6 @@ chmod +x chroma
 cp chroma ~/.local/bin/
 ```
 
-Or directly via `curl`:
-
-```bash
-curl -sL https://raw.githubusercontent.com/Ars-byte/Chroma/main/chroma -o ~/.local/bin/chroma && chmod +x ~/.local/bin/chroma
-```
-
----
 
 ## License
 
