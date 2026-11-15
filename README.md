@@ -13,29 +13,19 @@
 
 ---
 
-## Features
-
-- **Distraction-Free:** Cleans the screen buffer, hides the cursor, and displays only your swatches centered horizontally and vertically.
-- **Dynamic Palettes:** Automatically adapts to whatever color scheme your terminal emulator is using.
-
----
-
-## Quick Installation
+## Installation
 
 ```bash
 git clone https://github.com/Ars-byte/Chroma.git
 cd Chroma
-chmod +x install.sh
-./install.sh
+chmod +x chroma
+cp chroma ~/.local/bin/
 ```
 
-Make sure `~/.local/bin` is in your `PATH`:
-```bash
-# bash / zsh
-export PATH="$HOME/.local/bin:$PATH"
+Or directly via `curl`:
 
-# fish
-fish_add_path ~/.local/bin
+```bash
+curl -sL https://raw.githubusercontent.com/Ars-byte/Chroma/main/chroma -o ~/.local/bin/chroma && chmod +x ~/.local/bin/chroma
 ```
 
 ---
