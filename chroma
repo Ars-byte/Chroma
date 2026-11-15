@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+
+# Chroma - Minimalist terminal color palette viewer
+# Author: Ars-byte
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")"
+
+if [[ -d "${HOME}/.local/share/shell-color-scripts/colorscripts" ]]; then
+    DIR_COLORSCRIPTS="${HOME}/.local/share/shell-color-scripts/colorscripts"
+elif [[ -d "${SCRIPT_DIR}/colorscripts" ]]; then
+    DIR_COLORSCRIPTS="${SCRIPT_DIR}/colorscripts"
+elif [[ -d "/opt/shell-color-scripts/colorscripts" ]]; then
+    DIR_COLORSCRIPTS="/opt/shell-color-scripts/colorscripts"
+else
+    DIR_COLORSCRIPTS="${HOME}/.local/share/shell-color-scripts/colorscripts"
+fi
+
+get_dims() {
+    local c r
+    c=$(tput cols 2>/dev/null)
+    r=$(tput lines 2>/dev/null)
+    [[ "$c" =~ ^[0-9]+$ ]] || c="${COLUMNS:-80}"
+    [[ "$r" =~ ^[0-9]+$ ]] || r="${LINES:-24}"
+    [[ "$c" =~ ^[0-9]+$ ]] || c=80
+    [[ "$r" =~ ^[0-9]+$ ]] || r=24
+    echo "$c $r"
+}
+
+cleanup() {
+    printf '\e[?25h\e[?1049l'
+    stty echo 2>/dev/null
+}
+
+show_palette() {
+    local mode="${1:-7}"
+    local interactive="${2:-1}"
+
+    read -r cols rows <<< "$(get_dims)"
+
+    local d=$'\e[1m'
+    local t=$'\e[0m'
+
+    local color_indices=()
+    case "$mode" in
+        8)
+            color_indices=(0 1 2 3 4 5 6 7)
+            ;;
+        16)
+            color_indices=(1 2 3 4 5 6 7)
+            ;;
+        7|*)
+            color_indices=(1 2 3 4 5 6 7)
+            ;;
+    esac
+
+    local count=${#color_indices[@]}
+    local sw_w=4
+    local gap=2
+    local sp="  "
+
+    local content_w=$(( count * sw_w + (count - 1) * gap ))
+    local content_h=4
+    [[ "$mode" == "16" ]] && content_h=9
+
+    local margin_left=$(( (cols - content_w) / 2 ))
+    (( margin_left < 0 )) && margin_left=0
+
+    local margin_top=0
+    if (( interactive == 1 )); then
+        margin_top=$(( (rows - content_h) / 2 ))
+        (( margin_top < 0 )) && margin_top=0
+    fi
+
+    local pad=""
+    for (( m = 0; m < margin_left; m++ )); do
+        pad+=" "
+    done
+
+    if (( interactive == 1 )); then
+        trap cleanup EXIT INT TERM
+        printf '\e[?1049h\e[2J\e[H\e[?25l'
+        stty -echo 2>/dev/null
+
+        for (( v = 0; v < margin_top; v++ )); do
+            echo ""
+        done
+    else
+        echo ""
+    fi
+
+    for row in 0 1 2 3; do
+        local line="$pad"
+        for idx in "${!color_indices[@]}"; do
+            local c="${color_indices[$idx]}"
+            local piece=""
+            if (( row == 0 )); then
+                piece="\e[3${c}m███${d}▄${t}"
+            elif (( row == 1 || row == 2 )); then
+                piece="\e[3${c}m███${d}█${t}"
+            else
+                piece="${d}\e[3${c}m ▀▀▀${t}"
+            fi
+            line+="${piece}"
+            if (( idx < count - 1 )); then
+                line+="${sp}"
+            fi
+        done
+        echo -e "${line}"
+    done
+
+    if [[ "$mode" == "16" ]]; then
+        echo ""
+        for row in 0 1 2 3; do
+            local line="$pad"
+            for idx in "${!color_indices[@]}"; do
+                local c="${color_indices[$idx]}"
+                local piece=""
+                if (( row == 0 )); then
+                    piece="\e[9${c}m███${d}▄${t}"
+                elif (( row == 1 || row == 2 )); then
+                    piece="\e[9${c}m███${d}█${t}"
+                else
+                    piece="${d}\e[9${c}m ▀▀▀${t}"
+                fi
+                line+="${piece}"
+                if (( idx < count - 1 )); then
+                    line+="${sp}"
+                fi
+            done
+            echo -e "${line}"
+        done
+    fi
+
+    if (( interactive == 1 )); then
+        read -rsn1 < /dev/tty 2>/dev/null || read -rsn1
+        cleanup
+    else
+        echo ""
+    fi
+}
+
+launch_window() {
+    if command -v foot >/dev/null 2>&1; then
+        exec foot --app-id=chroma-popup -T "chroma" -w 506x145 -o pad=0x0 "$0" -f
+    else
+        echo "Error: foot terminal is required for floating window mode."
+        exit 1
+    fi
+}
+
+show_help() {
+    cat << EOF
+Usage: chroma [OPTION]
+
+Options:
+  (no args)              Distraction-free fullscreen view: centered swatches
+                         (press any key to exit)
+  -p, --print            Print directly to stdout without clearing or waiting
+  -w, --window           Open a clean floating popup window (requires foot)
+  -8, -a, --all          Show 8 base colors (including color 0 / black)
+  -16, -b, --16          Show 16 colors (regular + bright rows)
+  -r, --random           Run a random script from shell-color-scripts
+  -l, --list             List all available color scripts
+  -e, --exec <name>      Run a specific color script by name
+  <name>                 Directly run a script by name
+  -h, --help             Show this help message
+EOF
+}
+
+list_scripts() {
+    if [[ -d "$DIR_COLORSCRIPTS" ]]; then
+        echo "Available color scripts:"
+        ls "$DIR_COLORSCRIPTS" | column
+    else
+        echo "Colorscripts directory not found: $DIR_COLORSCRIPTS"
+    fi
+}
+
+run_random() {
+    if [[ ! -d "$DIR_COLORSCRIPTS" ]]; then
+        echo "Colorscripts directory not found: $DIR_COLORSCRIPTS"
+        exit 1
+    fi
+    local scripts=("$DIR_COLORSCRIPTS"/*)
+    local chosen="${scripts[RANDOM % ${#scripts[@]}]}"
+    echo -e "\e[2m[colorscript: $(basename "$chosen")]\e[0m"
+    exec "$chosen"
+}
+
+run_script() {
+    local target="$DIR_COLORSCRIPTS/$1"
+    if [[ -x "$target" ]]; then
+        exec "$target"
+    else
+        echo "Error: Color script '$1' not found."
+        echo "Run 'chroma --list' to see available scripts."
+        exit 1
+    fi
+}
+
+MODE="7"
+INTERACTIVE=1
+
+if [[ ! -t 0 || ! -t 1 ]]; then
+    INTERACTIVE=0
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help|help)
+            show_help
+            exit 0
+            ;;
+        -l|--list|list)
+            list_scripts
+            exit 0
+            ;;
+        -r|--random|random)
+            run_random
+            exit 0
+            ;;
+        -w|--window)
+            launch_window
+            exit 0
+            ;;
+        -p|--print)
+            INTERACTIVE=0
+            shift
+            ;;
+        -f)
+            INTERACTIVE=1
+            shift
+            ;;
+        -8|-a|--all|8)
+            MODE="8"
+            shift
+            ;;
+        -16|-b|--16|--bright|16)
+            MODE="16"
+            shift
+            ;;
+        -e|--exec|exec)
+            if [[ -n "$2" ]]; then
+                run_script "$2"
+            else
+                echo "Missing script name."
+                exit 1
+            fi
+            ;;
+        *)
+            if [[ -f "$DIR_COLORSCRIPTS/$1" ]]; then
+                run_script "$1"
+            else
+                echo "Unknown option or script: $1"
+                show_help
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+show_palette "$MODE" "$INTERACTIVE"
